@@ -1,0 +1,76 @@
+import re
+class SimpleReranker:
+    def __init__(self):
+        pass
+    def _tokenize(self, text: str):
+        return set(
+            re.findall(
+                r"\w+",
+                text.lower(),
+            )
+        )
+    def rerank(self, query: str, results, company_hint=None, top_k: int = 5,):
+        query_tokens = (self._tokenize(query))
+        reranked = []
+        for r in results:
+            text_tokens = (
+                self._tokenize(
+                    r["text"]
+                )
+            )
+            overlap = len(
+                query_tokens.intersection(
+                    text_tokens
+                )
+            )
+            exact_phrase_boost = 0
+            if query.lower() in (r["text"].lower()):
+                exact_phrase_boost = 5
+            path_boost = 0
+            path = r["path"].lower()
+            # BOOST REFUND DOCS
+            if "refund" in path:
+                path_boost += 3
+            # BOOST SUBSCRIPTION DOCS
+            if "subscription" in path:
+                path_boost += 2
+            # BOOST BILLING DOCS
+            if "billing" in path:
+                path_boost += 2
+            # PENALIZE LEGAL/PROMO DOCS
+            if (
+                "privacy" in path
+                or "legal" in path
+                or "sweepstakes" in path
+            ):
+                path_boost -= 4
+            # PENALIZE GENERIC INDEX FILES
+            if "index.md" in path:
+                path_boost -= 5
+            # COMPANY BOOST
+            company_boost = 0
+            if company_hint:
+                if (
+                    company_hint.lower()
+                    in r["company"].lower()
+                ):
+                    company_boost += 8
+            final_score = (
+                r["score"]
+                + overlap
+                + exact_phrase_boost
+                + path_boost
+                + company_boost
+            )
+            reranked.append({
+                **r,
+                "rerank_score":
+                    final_score,
+            })
+        reranked.sort(
+            key=lambda x: (
+                x["rerank_score"]
+            ),
+            reverse=True,
+        )
+        return reranked[:top_k]
