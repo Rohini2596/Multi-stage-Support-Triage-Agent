@@ -1,5 +1,7 @@
 from __future__ import annotations
+from asyncio.log import logger
 
+from faiss import logger
 import pandas as pd
 
 from code.agent import (
@@ -13,6 +15,9 @@ from code.ui.terminal_ui import (
     show_banner,
     show_ticket,
     show_result,
+)
+from code.logs.logger import (
+    PipelineLogger,
 )
 def main():
     print("STARTING SUPPORT TRIAGE AGENT...")
@@ -34,10 +39,12 @@ def main():
         f"Loaded {len(df)} tickets\n"
     )
     agent = SupportAgent()
+    logger = PipelineLogger()
+    logger.log_session_start()
     show_banner()
     # RUN PIPELINE
     outputs = []
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
 
         ticket = row.to_dict()
 
@@ -46,7 +53,26 @@ def main():
         result = agent.pipeline.process_row(ticket)
 
         show_result(result)
-
+        logger.log_turn(
+            title=f"Processed Ticket {idx}",
+            user_prompt=str(
+                ticket.get(
+                "issue",
+                ""
+                )
+            )[:1500],
+            summary=(
+                f"Generated "
+                f"{result.get('status', 'unknown')} "
+                f"response with risk "
+                f"{result.get('risk_level', 'unknown')}"
+            ),
+            actions=[
+                "classification",
+                "retrieval",
+                "response_generation",
+            ],
+        )
         outputs.append(result)
     out_df = pd.DataFrame(
         outputs
@@ -95,11 +121,12 @@ def main():
     print(
         f"Wrote "
         f"{len(out_df)} rows "
-        f"to:\n{OUTPUT_CSV}\n"
+        f"to:{OUTPUT_CSV}"
     )
     print(
         "Logs available at:"
-        "logs/log.txt"
+        f"Global: {logger.log_file}"
+        f"Repo: {logger.repo_log_file}"
     )
 if __name__ == "__main__":
     main()
