@@ -187,4 +187,10 @@ parent_agent=none
             f"{message}\n"
         )
 
-        self._write_log(entry)
+        with open(
+            self.log_file,
+            "a",
+            encoding="utf-8"
+        ) as f:
+
+            f.write(final)
