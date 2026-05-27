@@ -2,6 +2,8 @@ from __future__ import annotations
 import json
 from typing import Dict, Any
 from langdetect import detect
+from langdetect import DetectorFactory
+DetectorFactory.seed = 7
 from code.classifiers.intent_classifier import (
     IntentClassifier,
 )
@@ -41,7 +43,7 @@ from code.utils.query_expansion import (
 class SupportPipeline:
     def __init__(self):
         print(
-            "\nINITIALIZING PIPELINE...\n"
+            "INITIALIZING PIPELINE..."
         )
         self.logger = (
             PipelineLogger()
@@ -200,22 +202,32 @@ class SupportPipeline:
             if evidence
             else 0.0
         )
-        source_documents = list({
-            d["path"]
-            for d in evidence
-        })
+        source_documents = []
+        seen_paths = set()
+        for d in evidence:
+            path = d["path"]
+            if path not in seen_paths:
+                seen_paths.add(path)
+                source_documents.append(path)
         escalated = False
         if (
             injection_result
             .is_adversarial
         ):
             escalated = True
-        if risk_level in {
+        elif risk_level in {
             "high",
             "critical",
         }:
             escalated = True
-        if not evidence:
+        elif not evidence:
+            escalated = True
+        elif top_score < 3:
+            escalated = True
+        elif (
+            pii_result.pii_detected
+            and request_type == "bug"
+        ):
             escalated = True
         response = (
             self.generator.generate(
@@ -240,22 +252,24 @@ class SupportPipeline:
             if escalated
             else "replied"
         )
-        confidence_score = round(
-            min(
-                max(
-                    0.50 + (top_score / 100),
-                    0.45,
-                ),
-                0.92,
-            ),
-
-            2,
-        )
-        if escalated:
-            confidence_score = min(
-                confidence_score,
-                0.75,
-            )
+        confidence_score = 0.45
+        if evidence:
+            confidence_score += 0.15
+        if len(evidence) >= 3:
+            confidence_score += 0.10
+        if top_score >= 15:
+            confidence_score += 0.10
+        if not escalated:
+            confidence_score += 0.10
+        if injection_result.is_adversarial:
+            confidence_score -= 0.20
+        if risk_level in {
+            "high",
+            "critical",
+        }:
+            confidence_score -= 0.10
+        confidence_score = max(0.20, min(confidence_score, 0.90))
+        confidence_score = round(confidence_score, 2)
         self.logger.log(
             f"STATUS: {status}"
         )
@@ -306,6 +320,7 @@ class SupportPipeline:
                 language,
             "actions_taken":
                 json.dumps(
-                    actions
+                    actions, 
+                    sort_keys=True
                 ),
         }

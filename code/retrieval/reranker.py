@@ -69,8 +69,9 @@ class SimpleReranker:
             })
         reranked.sort(
             key=lambda x: (
-                x["rerank_score"]
-            ),
-            reverse=True,
+                -x["rerank_score"],
+                x["path"],
+                x["text"][:50],
+            )
         )
         return reranked[:top_k]

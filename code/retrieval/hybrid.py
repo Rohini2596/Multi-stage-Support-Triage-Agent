@@ -90,6 +90,7 @@ class HybridSearch:
             combined[key]["score"] += (
                 r["score"] * 0.55
             )
+        combined = dict(sorted(combined.items(), key=lambda x: x[0]))
         final_results = list(
             combined.values()
         )
@@ -97,6 +98,7 @@ class HybridSearch:
             f"COMBINED RESULTS: "
             f"{len(final_results)}"
         )
+        final_results = sorted(final_results, key=lambda x: (x.get("path", ""), round(x.get("score", 0),6),))
         # RERANK
         reranked = (
             self.reranker.rerank(
