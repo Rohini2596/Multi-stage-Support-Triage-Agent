@@ -94,6 +94,14 @@ class HybridSearch:
         final_results = list(
             combined.values()
         )
+        if company_hint:
+            filtered_results = []
+            for r in final_results:
+                result_company  = (r.get("company", "").lower().strip())
+                if result_company == company_hint.lower().strip():
+                    filtered_results.append(r)
+            if len(filtered_results) >= top_k:
+                final_results = filtered_results
         print(
             f"COMBINED RESULTS: "
             f"{len(final_results)}"

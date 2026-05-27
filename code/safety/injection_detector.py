@@ -96,5 +96,5 @@ class InjectionDetector:
         ]
         high_risk_hits = sum(1 for term in high_risk_terms if term in lowered)
         score = min(1.0, (len(matched) * 0.18 + high_risk_hits * 0.25))
-        is_adversarial = (score >= 0.35)
+        is_adversarial = (score >= 0.55)
         return InjectionResult(is_adversarial, matched, round(score, 2),)

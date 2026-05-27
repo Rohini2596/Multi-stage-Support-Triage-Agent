@@ -29,8 +29,8 @@ class SimpleReranker:
             path_boost = 0
             path = r["path"].lower()
             # BOOST REFUND DOCS
-            if "refund" in path:
-                path_boost += 3
+            if "refund" in path and (not company_hint  or company_hint.lower() in r.get("company",  "" ).lower()):
+                path_boost += 1
             # BOOST SUBSCRIPTION DOCS
             if "subscription" in path:
                 path_boost += 2
@@ -47,29 +47,39 @@ class SimpleReranker:
             # PENALIZE GENERIC INDEX FILES
             if "index.md" in path:
                 path_boost -= 5
+            generic_terms = [ "faq", "overview", "general", "introduction",]
+            if any(term in path for term in generic_terms):
+                path_boost -= 2
             # COMPANY BOOST
             company_boost = 0
+            company_penalty = 0
             if company_hint:
+                result_company = ( r.get("company", "").strip().lower())
                 if (
-                    company_hint.lower()
-                    in r["company"].lower()
+                    result_company == company_hint.strip().lower()
                 ):
-                    company_boost += 8
+                    
+                    company_boost += 15
+                else:
+                    company_penalty -= 25
             final_score = (
                 r["score"]
                 + overlap
                 + exact_phrase_boost
                 + path_boost
                 + company_boost
+                + company_penalty
             )
+            normalized_score = round(max(0.0, min(final_score, 100.0)), 4)
             reranked.append({
                 **r,
                 "rerank_score":
-                    final_score,
+                    normalized_score,
             })
         reranked.sort(
             key=lambda x: (
                 -x["rerank_score"],
+                x.get("company", ""),
                 x["path"],
                 x["text"][:50],
             )

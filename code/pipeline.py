@@ -202,6 +202,10 @@ class SupportPipeline:
             if evidence
             else 0.0
         )
+        self.logger.log(
+            f"TOP_SCORE: "
+            f"{top_score}"
+        )
         source_documents = []
         seen_paths = set()
         for d in evidence:
@@ -210,19 +214,22 @@ class SupportPipeline:
                 seen_paths.add(path)
                 source_documents.append(path)
         escalated = False
+        self.logger.log(
+            f"SOURCE_DOCS: "
+            f"{source_documents[:3]}"
+        )
         if (
             injection_result
             .is_adversarial
         ):
             escalated = True
-        elif risk_level in {
-            "high",
-            "critical",
-        }:
+        elif risk_level == "critical":
+            escalated = True
+        elif (risk_level == "high"):
             escalated = True
         elif not evidence:
             escalated = True
-        elif top_score < 3:
+        elif top_score < 3 and risk_level != "low":
             escalated = True
         elif (
             pii_result.pii_detected
@@ -244,7 +251,7 @@ class SupportPipeline:
                 ticket_text,
                 pii_result.pii_detected,
                 risk_level,
-                escalated,
+                injection_result.is_adversarial,
             )
         )
         status = (
@@ -252,23 +259,30 @@ class SupportPipeline:
             if escalated
             else "replied"
         )
-        confidence_score = 0.45
-        if evidence:
-            confidence_score += 0.15
-        if len(evidence) >= 3:
-            confidence_score += 0.10
-        if top_score >= 15:
-            confidence_score += 0.10
-        if not escalated:
-            confidence_score += 0.10
         if injection_result.is_adversarial:
-            confidence_score -= 0.20
+            confidence_score = 0.45
+        elif escalated:
+            confidence_score = 0.60
+        elif top_score >= 70:
+            confidence_score = 0.95
+        elif top_score >= 50:
+            confidence_score = 0.90
+        elif top_score >= 35:
+            confidence_score = 0.82
+        elif top_score >= 20:
+            confidence_score = 0.72
+        elif top_score >= 10:
+            confidence_score = 0.65
+        else:
+            confidence_score = 0.55
+        if len(evidence) >= 3:
+            confidence_score += 0.03
         if risk_level in {
             "high",
             "critical",
         }:
-            confidence_score -= 0.10
-        confidence_score = max(0.20, min(confidence_score, 0.90))
+            confidence_score -= 0.08
+        confidence_score = max(0.20, min(confidence_score, 0.98))
         confidence_score = round(confidence_score, 2)
         self.logger.log(
             f"STATUS: {status}"
@@ -300,6 +314,12 @@ class SupportPipeline:
                     f"risk={risk_level}; "
                     f"retrieval_score="
                     f"{round(top_score, 4)}"
+                    f"evidence_count="
+                    f"{len(evidence)}; "
+                    f"pii="
+                    f"{pii_result.pii_detected}; "
+                    f"injection="
+                    f"{injection_result.is_adversarial}"
                 ),
             "request_type":
                 request_type,
@@ -307,7 +327,7 @@ class SupportPipeline:
                 confidence_score,
             "source_documents":
                 "|".join(
-                    source_documents
+                    source_documents[:3]
                 ),
             "risk_level":
                 risk_level,
@@ -324,3 +344,5 @@ class SupportPipeline:
                     sort_keys=True
                 ),
         }
+        
+        

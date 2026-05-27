@@ -153,12 +153,20 @@ class ToolPlanner:
                 }
             })
             if (
-                risk_level
-                in {
-                    "high",
-                    "critical",
-                }
+                injection_detected
             ):
+                actions.append({
+                    "action":
+                        "escalate_to_human",
+                    "parameters": {
+                        "priority": "urgent",
+                        "department": "security",
+                        "summary":
+                            "Potential prompt injection "
+                            "or adversarial behavior detected."
+                    }
+                })
+            elif risk_level == "critical":
                 actions.append({
                     "action":
                         "escalate_to_human",
@@ -166,12 +174,11 @@ class ToolPlanner:
                         "priority": "high",
                         "department": "security",
                         "summary":
-                            "High-risk or adversarial "
-                            "activity detected."
+                            "Critical security or fraud risk detected."
                     }
                 })
         if (
-            wants_lock or suspected_compromise
+            (wants_lock or suspected_compromise)
             and self._tool_exists(
                 "lock_account"
             )
@@ -185,7 +192,7 @@ class ToolPlanner:
                 }
             })
         # ACCOUNT RECOVERY
-        if wants_recovery and risk_level not in {"high", "critical"}:
+        if wants_recovery and not suspected_compromise and risk_level not in {"high", "critical",}:
             if self._tool_exists("reset_password"):
                 actions.append({
                     "action": "reset_password",

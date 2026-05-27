@@ -185,11 +185,10 @@ class ResponseGenerator:
         if escalated:
 
             response = (
-                "I’ve escalated this case "
-                "for human review because "
-                "it may require additional "
-                "verification or manual "
-                "handling."
+                "This request requires additional "
+                "review by a human support specialist "
+                "because it may involve verification, "
+                "policy review, or sensitive account actions."
             )
 
             if evidence:
@@ -299,13 +298,13 @@ Requirements:
                 )
 
         response_parts = []
-
+        added_topics = set()
         lower_ticket = (
             ticket_text.lower()
         )
 
         # REFUND CASE
-        if "refund" in lower_ticket:
+        if "refund" in lower_ticket and "refund" not in added_topics:
 
             response_parts.append(
                 "Refund-related requests may "
@@ -315,13 +314,14 @@ Requirements:
                 "process documented in the "
                 "retrieved support materials."
             )
+            added_topics.add("refund")
 
         # SUBSCRIPTION CASE
         if (
-            "subscription"
+            ("subscription"
             in lower_ticket
             or "cancel"
-            in lower_ticket
+            in lower_ticket) and "subscription" not in added_topics
         ):
 
             response_parts.append(
@@ -332,13 +332,14 @@ Requirements:
                 "mobile app store "
                 "subscription page."
             )
-
+            added_topics.add("subscription")
         # BILLING CASE
         if (
-            "charged"
+            ("charged"
             in lower_ticket
             or "billing"
-            in lower_ticket
+            in lower_ticket)
+            and "billing" not in added_topics
         ):
 
             response_parts.append(
@@ -347,22 +348,37 @@ Requirements:
                 "verification before "
                 "refund processing."
             )
+            added_topics.add("billing")
 
         # GENERIC FALLBACK
         if not response_parts:
-
             response_parts.append(
-                f"This issue appears "
-                f"related to "
-                f"{product_area}."
+                f"The retrieved support documentation suggests this issue is related to "
+                f"{product_area.replace('_', ' ')}. "
             )
 
         # SOURCES
+        clean_sources = []
+        for path in unique_paths[:3]:
+            filename = (
+                path.split("\\")[-1]
+                .replace(".md", "")
+            )
+            filename = re.sub(
+                r"^\d+[-_]*",
+                "",
+                filename
+            )
+            filename = (
+                filename
+                .replace("-", " ")
+                .replace("%20", " ").strip()
+            )
+            clean_sources.append(filename)
+        best_doc = (clean_sources[0] if clean_sources else "support documentation")
         response_parts.append(
             "Relevant documentation: "
-            + ", ".join(
-                unique_paths[:3]
-            )
+            + ", ".join(clean_sources)
         )
         final_response = " ".join(
             response_parts
