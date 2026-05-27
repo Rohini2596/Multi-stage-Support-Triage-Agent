@@ -88,6 +88,16 @@ class ToolPlanner:
                 "disable account",
             ]
         )
+        suspected_compromise = any(
+            k in t
+            for k in [
+                "hacked",
+                "account stolen",
+                "unauthorized access",
+                "account compromised",
+                "someone logged in",
+            ]
+        )
         wants_verify = any(
             k in t
             for k in [
@@ -115,8 +125,8 @@ class ToolPlanner:
                 "action":
                     "verify_identity",
                 "parameters": {
-                    "reason":
-                        "identity verification requested"
+                    "method": "email_otp",
+                    "target": "user_on_file"
                 }
             })
         if wants_refund:
@@ -127,16 +137,19 @@ class ToolPlanner:
                     "action":
                         "verify_identity",
                     "parameters": {
-                        "reason":
-                            "refund requested"
+                        "method": "email_otp",
+                        "target": "user_on_file"
                     }
                 })
             actions.append({
                 "action":
-                    "escalate_ticket",
+                    "escalate_to_human",
                 "parameters": {
-                    "reason":
-                        "refund approval required"
+                    "priority": "normal",
+                    "department": "billing",
+                    "summary":
+                        "Refund request requires "
+                        "human review and approval."
                 }
             })
             if (
@@ -148,14 +161,17 @@ class ToolPlanner:
             ):
                 actions.append({
                     "action":
-                        "escalate_ticket",
+                        "escalate_to_human",
                     "parameters": {
-                        "reason":
-                            "high risk detected"
+                        "priority": "high",
+                        "department": "security",
+                        "summary":
+                            "High-risk or adversarial "
+                            "activity detected."
                     }
                 })
         if (
-            wants_lock
+            wants_lock or suspected_compromise
             and self._tool_exists(
                 "lock_account"
             )
@@ -164,16 +180,30 @@ class ToolPlanner:
                 "action":
                     "lock_account",
                 "parameters": {
-                    "reason":
-                        "user requested account lock"
+                    "user_identifier": "user_on_file",
+                    "lock_reason": "suspected_fraud" if suspected_compromise else "user_requested"
                 }
             })
         # ACCOUNT RECOVERY
-        if wants_recovery:
+        if wants_recovery and risk_level not in {"high", "critical"}:
+            if self._tool_exists("reset_password"):
+                actions.append({
+                    "action": "reset_password",
+                    "parameters": {
+                        "user_email": "user_on_file"
+                    }
+                })
+        if injection_detected:
             actions.append({
                 "action":
-                    "account_recovery",
-                "parameters": {}
+                    "escalate_to_human",
+                "parameters": {
+                    "priority": "urgent",
+                    "department": "security",
+                    "summary":
+                        "Potential prompt injection "
+                        "or adversarial behavior detected."
+                }
             })
         unique_actions = []
         seen = set()
@@ -190,5 +220,14 @@ class ToolPlanner:
                 unique_actions.append(
                     action
                 )
+        unique_actions = sorted(
+            unique_actions,
+            key=lambda x: (
+                x["action"],
+                json.dumps(
+                    x["parameters"],
+                    sort_keys=True
+                ),
+            )
+        )
         return unique_actions
-        return actions
