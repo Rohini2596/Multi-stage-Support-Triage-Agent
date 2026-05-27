@@ -15,11 +15,14 @@ env/
 *.swp
 *.swo
 *~
-# OUTPUT FILES
-support_tickets/output.csv
 
-# LOGS
-logs/
+# Generated outputs
+support_tickets/output*.csv
+
+# Generated log files only
+logs/*.txt
+code/logs/*.txt
+
 # OS
 .DS_Store
 Thumbs.db
