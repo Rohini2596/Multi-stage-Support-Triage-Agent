@@ -348,21 +348,14 @@ Each subsystem is isolated and independently extensible:
 * evaluation
 * logging
 ---
-## Auditability
+# Auditability
 Logging and structured outputs make debugging and evaluation easier.
 ---
 # Limitations
-## Lexical Retrieval Limitations
-BM25 and TF-IDF may miss semantic similarity.
----
-## Heuristic Confidence Scoring
-Confidence calibration is rule-based rather than learned.
----
-## Limited Multilingual Support
-Query expansion uses a small heuristic mapping.
----
-## Corpus Dependency
-Response quality depends on the quality of documents inside `data/`.
+1. Lexical Retrieval Limitations: BM25 and TF-IDF may miss semantic similarity.
+2. Heuristic Confidence Scoring: Confidence calibration is rule-based rather than learned.
+3. Limited Multilingual Support: Query expansion uses a small heuristic mapping.
+4. Corpus Dependency: Response quality depends on the quality of documents inside `data/`.
 ---
 # Conclusion
 The Multi-stage Support Triage Agent is a deterministic, retrieval-grounded support automation pipeline that combines:
