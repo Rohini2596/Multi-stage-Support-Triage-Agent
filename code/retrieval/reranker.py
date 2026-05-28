@@ -24,7 +24,7 @@ class SimpleReranker:
                 )
             )
             exact_phrase_boost = 0
-            if query.lower() in (r["text"].lower()):
+            if len(query.split()) > 3 and query.lower() in r["text"].lower():
                 exact_phrase_boost = 5
             path_boost = 0
             path = r["path"].lower()
@@ -54,21 +54,19 @@ class SimpleReranker:
             company_boost = 0
             company_penalty = 0
             if company_hint:
+                normalized_hint = (company_hint.lower().strip())
+                alias_map = {"openai": "claude", "anthropic": "claude",}
+                normalized_hint = alias_map.get(normalized_hint, normalized_hint)
                 result_company = ( r.get("company", "").strip().lower())
-                if (
-                    result_company == company_hint.strip().lower()
-                ):
+                if normalized_hint in result_company:
                     
-                    company_boost += 15
-                else:
-                    company_penalty -= 25
+                    company_boost += 8
             final_score = (
                 r["score"]
                 + overlap
                 + exact_phrase_boost
                 + path_boost
                 + company_boost
-                + company_penalty
             )
             normalized_score = round(max(0.0, min(final_score, 100.0)), 4)
             reranked.append({

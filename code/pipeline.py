@@ -7,8 +7,8 @@ DetectorFactory.seed = 7
 from code.classifiers.intent_classifier import (
     IntentClassifier,
 )
-from code.classifiers.product_area_classifier import (
-    classify_product_area,
+from code.safety.unsupported_detector import (
+    UnsupportedDetector,
 )
 from code.classifiers.risk_classifier import (
     RiskClassifier,
@@ -22,8 +22,14 @@ from code.logs.logger import (
 from code.retrieval.hybrid import (
     HybridSearch,
 )
-from code.safety.injection_detector import (
-    InjectionDetector,
+from code.retrieval.confidence import (
+    ConfidenceCalibrator,
+)
+from code.retrieval.router import (
+    ProductRouter,
+)
+from code.safety.adversarial_detector import (
+    AdversarialDetector,
 )
 from code.safety.pii_detector import (
     PIIDetector,
@@ -51,9 +57,18 @@ class SupportPipeline:
         self.search_engine = (
             HybridSearch()
         )
-        self.injection_detector = (
-            InjectionDetector()
+        self.confidence_calibrator = (
+            ConfidenceCalibrator()
         )
+        self.unsupported_detector = (
+            UnsupportedDetector()
+        )
+        self.product_router = (
+            ProductRouter()
+        )
+        self.adversarial_detector = (
+            AdversarialDetector()
+)
         self.pii_detector = (
             PIIDetector()
         )
@@ -140,8 +155,8 @@ class SupportPipeline:
                 ticket_text
             )
         )
-        injection_result = (
-            self.injection_detector.detect(
+        adversarial_result = (
+            self.adversarial_detector.detect(
                 ticket_text
             )
         )
@@ -153,22 +168,72 @@ class SupportPipeline:
         risk_level = (
             self.risk_classifier.classify(
                 ticket_text,
-                injection_detected = injection_result.is_adversarial,
+                injection_detected = adversarial_result.is_adversarial,
                 pii_detected=(
                     pii_result.pii_detected
                 ),
             )
         )
+        SECURITY_KEYWORDS = [
+            "hacked",
+            "hack",
+            "fraud",
+            "stolen card",
+            "security breach",
+            "unauthorized transaction",
+            "account takeover",
+            "phishing",
+            "scam",
+        ]
+        if any(
+            keyword in ticket_text.lower()
+            for keyword in SECURITY_KEYWORDS
+        ):
+            risk_level = "critical"
+            self.logger.log("SECURITY_ESCALATION_TRIGGERED")
         product_area = (
-            classify_product_area(
-                text=query,
-                company=company,
-            )
+            self.product_router.route(query)
         )
+        if adversarial_result.is_adversarial:
+            self.logger.log(
+                f"ADVERSARIAL_ATTACK: "
+                f"{adversarial_result.attack_type}"
+            )
+            self.logger.log(
+                f"ATTACK_PATTERNS: "
+                f"{adversarial_result.matched_patterns}"
+            )
+
+            self.logger.log(
+                f"ATTACK_RISK_SCORE: "
+                f"{adversarial_result.risk_score}"
+            )
+            safe_response = (
+                "Your request contains unsafe or "
+                "unauthorized instructions. "
+                "This ticket has been escalated "
+                "to a human support specialist."
+            )
+            return {
+                "status": "escalated",
+                "product_area": "security",
+                "response": safe_response,
+                "justification": (
+                    f"Adversarial content detected: "
+                    f"{adversarial_result.attack_type}"
+                ),
+                "request_type": "invalid",
+                "confidence_score": 0.20,
+                "source_documents": "",
+                "risk_level": "critical",
+                "pii_detected": bool(pii_result.pii_detected),
+                "language": language,
+                "actions_taken": json.dumps(["escalated_due_to_attack"]),
+            }   
         evidence = (
             self.search_engine.search(
                 query=query,
-                company_hint=company,
+                company_hint=(None if product_area == "general" else product_area),
                 top_k=5,
             )
         )
@@ -202,9 +267,28 @@ class SupportPipeline:
             if evidence
             else 0.0
         )
+        retrieval_assessment = (
+            self.confidence_calibrator.assess(evidence=evidence, risk_level=risk_level,))
+        unsupported_result = (self.unsupported_detector.detect(text=ticket_text,retrieval_quality=(retrieval_assessment.retrieval_quality),top_score=top_score,))
+        self.logger.log(
+            f"UNSUPPORTED_DETECTED: "
+            f"{unsupported_result.is_unsupported}"
+        )
+        self.logger.log(
+            f"UNSUPPORTED_REASON: "
+            f"{unsupported_result.reason}"
+        )
         self.logger.log(
             f"TOP_SCORE: "
             f"{top_score}"
+        )
+        self.logger.log(
+            f"RETRIEVAL_QUALITY: "
+            f"{retrieval_assessment.retrieval_quality}"
+        )
+        self.logger.log(
+            f"RETRIEVAL_REASON: "
+            f"{retrieval_assessment.reason}"
         )
         source_documents = []
         seen_paths = set()
@@ -218,24 +302,27 @@ class SupportPipeline:
             f"SOURCE_DOCS: "
             f"{source_documents[:3]}"
         )
-        if (
-            injection_result
-            .is_adversarial
-        ):
+        if risk_level == "critical":
             escalated = True
-        elif risk_level == "critical":
+        elif (risk_level == "high") and retrieval_assessment.retrieval_quality in {"moderate", "weak"}:
             escalated = True
-        elif (risk_level == "high"):
-            escalated = True
-        elif not evidence:
-            escalated = True
-        elif top_score < 3 and risk_level != "low":
+        elif retrieval_assessment.should_escalate:
             escalated = True
         elif (
             pii_result.pii_detected
             and request_type == "bug"
         ):
             escalated = True
+        if unsupported_result.is_unsupported:
+            escalated = True
+            self.logger.log("UNSUPPORTED_TICKET_ESCALATION")
+        self.logger.log(
+            f"ESCALATED: {escalated}"
+        )
+        self.logger.log(
+            f"FINAL_RETRIEVAL_QUALITY: "
+            f"{retrieval_assessment.retrieval_quality}"
+            )
         response = (
             self.generator.generate(
                 ticket_text=ticket_text,
@@ -251,7 +338,7 @@ class SupportPipeline:
                 ticket_text,
                 pii_result.pii_detected,
                 risk_level,
-                injection_result.is_adversarial,
+                adversarial_result.is_adversarial,
             )
         )
         status = (
@@ -259,29 +346,13 @@ class SupportPipeline:
             if escalated
             else "replied"
         )
-        if injection_result.is_adversarial:
-            confidence_score = 0.45
-        elif escalated:
-            confidence_score = 0.60
-        elif top_score >= 70:
-            confidence_score = 0.95
-        elif top_score >= 50:
-            confidence_score = 0.90
-        elif top_score >= 35:
-            confidence_score = 0.82
-        elif top_score >= 20:
-            confidence_score = 0.72
-        elif top_score >= 10:
-            confidence_score = 0.65
-        else:
-            confidence_score = 0.55
-        if len(evidence) >= 3:
-            confidence_score += 0.03
-        if risk_level in {
-            "high",
-            "critical",
-        }:
-            confidence_score -= 0.08
+        confidence_score = (
+            retrieval_assessment.confidence_score
+        )
+        if escalated:
+            confidence_score -= 0.10
+        if risk_level in {"high", "critical"}:
+             confidence_score -= 0.08
         confidence_score = max(0.20, min(confidence_score, 0.98))
         confidence_score = round(confidence_score, 2)
         self.logger.log(
@@ -312,14 +383,20 @@ class SupportPipeline:
             "justification":
                 (
                     f"risk={risk_level}; "
+                    f"retrieval_quality="
+                    f"{retrieval_assessment.retrieval_quality}; "
+                    f"retrieval_reason="
+                    f"{retrieval_assessment.reason}; "
                     f"retrieval_score="
-                    f"{round(top_score, 4)}"
+                    f"{round(top_score, 4)}; "
                     f"evidence_count="
                     f"{len(evidence)}; "
                     f"pii="
                     f"{pii_result.pii_detected}; "
-                    f"injection="
-                    f"{injection_result.is_adversarial}"
+                    f"unsupported="
+                    f"{unsupported_result.is_unsupported}; "
+                    f"adversarial="
+                    f"{adversarial_result.is_adversarial}"
                 ),
             "request_type":
                 request_type,

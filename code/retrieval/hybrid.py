@@ -90,15 +90,17 @@ class HybridSearch:
             combined[key]["score"] += (
                 r["score"] * 0.55
             )
-        combined = dict(sorted(combined.items(), key=lambda x: x[0]))
         final_results = list(
             combined.values()
         )
         if company_hint:
+            normalized_hint = (company_hint.lower().strip())
+            alias_map = {"openai": "claude", "anthropic": "claude",}
+            normalized_hint = alias_map.get(normalized_hint, normalized_hint)
             filtered_results = []
             for r in final_results:
                 result_company  = (r.get("company", "").lower().strip())
-                if result_company == company_hint.lower().strip():
+                if normalized_hint in result_company:
                     filtered_results.append(r)
             if len(filtered_results) >= top_k:
                 final_results = filtered_results
@@ -106,8 +108,12 @@ class HybridSearch:
             f"COMBINED RESULTS: "
             f"{len(final_results)}"
         )
-        final_results = sorted(final_results, key=lambda x: (x.get("path", ""), round(x.get("score", 0),6),))
-        # RERANK
+        final_results = sorted(final_results, key=lambda x: x.get("score", 0), reverse=True)
+        print("TOP COMBINED SCORES:")
+        for r in final_results[:5]:
+            print(round(r.get("score", 0), 4),r.get("path", ""))
+        
+        final_results = final_results[:20]
         reranked = (
             self.reranker.rerank(
                 query=query,
