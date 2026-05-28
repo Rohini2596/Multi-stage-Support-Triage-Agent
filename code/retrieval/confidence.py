@@ -18,10 +18,12 @@ class ConfidenceCalibrator:
         risk_level: str,
     ) -> RetrievalAssessment:
 
+        # NO EVIDENCE
         if not evidence:
+
             return RetrievalAssessment(
                 should_escalate=True,
-                confidence_score=0.20,
+                confidence_score=0.15,
                 reason="No supporting evidence found",
                 retrieval_quality="none",
             )
@@ -37,38 +39,50 @@ class ConfidenceCalibrator:
             sum(scores) / len(scores)
         )
 
-        # Weak retrieval
-        if top_score < 8:
+        # VERY WEAK RETRIEVAL
+        if top_score < 10:
+
             return RetrievalAssessment(
                 should_escalate=True,
-                confidence_score=0.35,
-                reason="Top retrieval score too low",
+                confidence_score=0.25,
+                reason="Retrieval evidence too weak",
                 retrieval_quality="weak",
             )
 
-        # Medium confidence
-        if top_score < 20:
+        # MODERATE RETRIEVAL
+        if top_score < 25:
+
             return RetrievalAssessment(
                 should_escalate=(
                     risk_level != "low"
                 ),
-                confidence_score=0.55,
+                confidence_score=0.50,
                 reason="Moderate retrieval confidence",
                 retrieval_quality="moderate",
             )
 
-        # Strong retrieval
-        if top_score >= 20 and avg_score >= 12:
+        # STRONG RETRIEVAL
+        if (
+            top_score >= 35
+            and avg_score >= 20
+        ):
+
             return RetrievalAssessment(
                 should_escalate=False,
-                confidence_score=0.88,
+                confidence_score=0.82,
                 reason="Strong retrieval evidence",
                 retrieval_quality="strong",
             )
 
+        # ACCEPTABLE RETRIEVAL
         return RetrievalAssessment(
-            should_escalate=False,
-            confidence_score=0.72,
+            should_escalate=(
+                risk_level in {
+                    "high",
+                    "critical",
+                }
+            ),
+            confidence_score=0.65,
             reason="Acceptable retrieval quality",
             retrieval_quality="acceptable",
         )

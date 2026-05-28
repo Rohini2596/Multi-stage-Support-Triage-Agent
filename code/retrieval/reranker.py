@@ -9,9 +9,22 @@ class SimpleReranker:
                 text.lower(),
             )
         )
+    BAD_MIXES = {
+        "visa": ["claude", "hackerrank","anthropic",],
+        "claude": ["visa-emergency", "hackerrank","travel-support",],
+        "devplatform": ["visa","claude","anthropic",],
+    }
+    ALIAS_MAP = {
+        "openai": "claude",
+        "anthropic": "claude",
+    }
     def rerank(self, query: str, results, company_hint=None, top_k: int = 5,):
         query_tokens = (self._tokenize(query))
         reranked = []
+        normalized_hint = None
+        if company_hint:
+            normalized_hint = (company_hint.lower().strip())
+            normalized_hint = self.ALIAS_MAP.get(normalized_hint, normalized_hint)
         for r in results:
             text_tokens = (
                 self._tokenize(
@@ -52,15 +65,20 @@ class SimpleReranker:
                 path_boost -= 2
             # COMPANY BOOST
             company_boost = 0
-            company_penalty = 0
-            if company_hint:
-                normalized_hint = (company_hint.lower().strip())
-                alias_map = {"openai": "claude", "anthropic": "claude",}
-                normalized_hint = alias_map.get(normalized_hint, normalized_hint)
-                result_company = ( r.get("company", "").strip().lower())
+            if normalized_hint:
+                result_company = (r.get("company", "").strip().lower())
                 if normalized_hint in result_company:
-                    
                     company_boost += 8
+            if normalized_hint:
+                bad_terms = self.BAD_MIXES.get(
+                    normalized_hint,
+                    [],
+                )
+                if any(
+                    term in path
+                    for term in bad_terms
+                ):
+                    path_boost -= 8
             final_score = (
                 r["score"]
                 + overlap
