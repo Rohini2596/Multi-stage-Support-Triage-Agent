@@ -8,40 +8,6 @@ The architecture is designed around four major goals:
 * Deterministic behavior
 * Auditability and traceability
 ---
-# Repository Structure
-Multi-stage-Support-Triage-Agent/
-│
-├── README.md
-├── requirements.txt
-│
-├── code/
-│   ├── main.py
-│   ├── agent.py
-│   ├── config.py
-│   ├── pipeline.py
-│   ├── validate_output.py
-│   │
-│   ├── classifiers/
-│   ├── retrieval/
-│   ├── safety/
-│   ├── generation/
-│   ├── tools/
-│   ├── utils/
-│   ├── evaluation/
-│   ├── logs/
-│   ├── tests/
-│   └── ui/
-│
-├── data/
-│   ├── claude/
-│   ├── devplatform/
-│   ├── visa/
-│   └── api_specs/
-│
-└── support_tickets/
-    ├── support_tickets.csv
-    └── output.csv
----
 # System Architecture
 ![System Workflow](images/workflow.png)
 ---
@@ -370,3 +336,90 @@ The Multi-stage Support Triage Agent is a deterministic, retrieval-grounded supp
 * action planning
 * output validation
 into a structured and auditable support triage workflow.
+# Self-Assessment
+
+## Performance Evaluation
+
+| Evaluation Dimension | Rating (1-10) | Notes |
+|---|---:|---|
+| Retrieval Accuracy | 8 | Strong on keyword-heavy Claude, Visa, and DevPlatform tickets. Hybrid retrieval and reranking usually find relevant support docs. |
+| Safety Detection | 9 | PII, injection, adversarial, and unsupported-request checks are conservative and effective. |
+| Escalation Decisions | 8 | The system escalates risky or low-confidence cases appropriately, especially billing, security, and unsupported tickets. |
+| Response Quality | 7 | Responses are grounded and structured, but quality depends heavily on retrieval strength. |
+| Deterministic Behavior | 9 | The pipeline is mostly rule-based and stable, which makes behavior predictable. |
+| Multilingual Handling | 6 | Basic multilingual support exists, but it is still heuristic and limited. |
+| Observability / Logging | 6 | Logging is present and useful, but not yet a full production observability stack. |
+| Robustness to Adversarial Inputs | 7 | Common adversarial and prompt-injection patterns are handled, but more subtle attacks may still slip through. |
+| Output Validation | 9 | The output format is strongly enforced, which makes the final CSV reliable. |
+| End-to-End Reliability | 8 | The pipeline handles normal and risky cases well, with escalation used as a safe fallback. |
+
+---
+
+## The 3 Hardest Visible Tickets and My Approach
+
+### 1. Refund / billing-related Visa tickets
+These were hard because they often needed both policy grounding and identity verification. Some cases were answered with medium confidence and action planning such as `escalate_to_human` and `verify_identity`.
+
+**Approach**
+- Use retrieval to find the relevant billing/support documentation.
+- Treat refund and billing flows as higher risk.
+- Escalate when the evidence is insufficient or when verification is needed.
+- Prefer a safe human-review path over a speculative answer.
+
+### 2. Critical security / PII-related tickets
+These were harder because the correct answer was often not a normal support response. In the visible set, some Visa and Claude cases were escalated with `pii_detected=True` or critical risk.
+
+**Approach**
+- Run PII detection before response generation.
+- Treat any security or unauthorized-activity signal as high priority.
+- Escalate immediately when the request touches identity, fraud, or sensitive account data.
+- Avoid exposing or reflecting sensitive details in the response.
+
+### 3. Unsupported / low-evidence general tickets
+These were hard because the system had to decide whether the request was actually supported by the corpus. Some visible rows were escalated because retrieval confidence was weak or the detector marked the request unsupported.
+
+**Approach**
+- Use retrieval confidence as a gate.
+- Escalate when the retrieved evidence is too weak or too generic.
+- Avoid forcing a reply when the system does not have strong support.
+- Prefer a safe escalation message over a low-confidence hallucination.
+
+---
+
+## Predicted Hidden-Test Adversarial Categories
+
+I expect the hidden test set may include:
+
+- prompt injection attempts
+- jailbreak-style instruction overrides
+- data exfiltration requests
+- fake escalation requests
+- PII leakage attempts
+- cross-domain contamination
+- unsupported or nonsense queries
+- obfuscated adversarial phrasing
+- multilingual jailbreaks
+- low-context tickets designed to trigger hallucination
+- security-sensitive tickets with misleading wording
+
+The strongest risks for this system are likely not simple keyword attacks, but disguised requests that look like normal support tickets while trying to bypass safety checks.
+
+---
+
+## One Failure Mode I Know About But Did Not Fix
+
+The main failure mode is **semantic retrieval weakness**.
+
+The retriever is mostly lexical, so if a user describes a problem with different wording than the indexed docs, retrieval confidence can drop even when the correct document exists. That can cause:
+
+- weaker top-k matches
+- unnecessary escalation
+- lower-quality grounded responses
+
+A more advanced semantic embedding retriever would probably improve this, but I did not have time to add it.
+
+---
+
+## Final Takeaway
+
+The agent is strongest when the ticket matches the corpus clearly and the domain is obvious. It is safest when the ticket is risky, ambiguous, or unsupported, because it escalates instead of guessing.
