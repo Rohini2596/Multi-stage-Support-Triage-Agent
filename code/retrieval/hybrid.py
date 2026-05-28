@@ -95,17 +95,22 @@ class HybridSearch:
         )
         if company_hint:
             normalized_hint = (company_hint.lower().strip())
-            alias_map = {"openai": "claude", "anthropic": "claude",}
+            alias_map = {"hackerrank": "devplatform", "anthropic": "claude",}
             normalized_hint = alias_map.get(normalized_hint, normalized_hint)
+            DOMAIN_MAP = {"visa": ["visa",],"claude": ["claude", "anthropic",],"devplatform": ["devplatform", "hackerrank",],}
+            allowed_domains = DOMAIN_MAP.get(normalized_hint, [])
             filtered_results = []
             for r in final_results:
+                path = r.get("path", "").lower()
                 result_company  = (r.get("company", "").lower().strip())
-                if normalized_hint in result_company:
+                path_matches = any(domain in path for domain in allowed_domains)
+                company_matches = normalized_hint in result_company
+                if path_matches or company_matches:
                     filtered_results.append(r)
             if len(filtered_results) >= top_k:
                 final_results = filtered_results
         print(
-            f"COMBINED RESULTS: "
+            f"STRICT DOMAIN FILTER: "
             f"{len(final_results)}"
         )
         final_results = sorted(final_results, key=lambda x: x.get("score", 0), reverse=True)

@@ -183,14 +183,36 @@ class ResponseGenerator:
 
         # ESCALATION RESPONSE
         if escalated:
-
-            response = (
-                "This request requires additional "
-                "review by a human support specialist "
-                "because it may involve verification, "
-                "policy review, or sensitive account actions."
-            )
-
+            lower_ticket = (ticket_text.lower())
+            if any(
+                k in lower_ticket
+                for k in ["fraud", "hacked", "unauthorized", "stolen", "security",]
+            ):
+                response = (
+                    "This request has been escalated "
+                    "to a human support specialist "
+                    "because it involves potential "
+                    "account security or unauthorized "
+                    "activity concerns."
+                )
+            elif any(k in lower_ticket for k in ["refund", "billing", "charge", "chargeback",]):
+                response = (
+                    "This billing-related request "
+                    "requires manual review and "
+                    "verification before further "
+                    "processing can occur."
+                )
+            elif any(k in lower_ticket for k in [ "sso", "integration",  "api", "authentication",]):
+                response = (
+                    "This technical integration issue "
+                    "has been escalated for additional "
+                    "review by a support specialist."
+                )
+            else:
+                response = (
+                    "This request requires additional "
+                    "review by a human support specialist."
+                )
             if evidence:
 
                 unique_paths = []
@@ -201,7 +223,7 @@ class ResponseGenerator:
                         seen_paths.add(path)
                         unique_paths.append(path)
                 response += (
-                    "\n\nRelevant sources: "
+                    "\nRelevant support references: "
                     + ", ".join(unique_paths)
                 )
 
@@ -352,10 +374,29 @@ Requirements:
 
         # GENERIC FALLBACK
         if not response_parts:
-            response_parts.append(
-                f"The retrieved support documentation suggests this issue is related to "
-                f"{product_area.replace('_', ' ')}. "
-            )
+            if product_area == "claude":
+                response_parts.append(
+                    "The issue appears related to "
+                    "Claude account access or "
+                    "platform usage workflows."
+                )
+            elif product_area == "visa":
+                response_parts.append(
+                    "The request appears related "
+                    "to Visa account, payment, "
+                    "or transaction support."
+                )
+            elif product_area == "devplatform":
+                response_parts.append(
+                    "The request appears related "
+                    "to developer platform or "
+                    "integration workflows."
+                )
+            else:
+                response_parts.append(
+                    "Relevant support documentation "
+                    "was identified for this request."
+                )
 
         # SOURCES
         clean_sources = []
@@ -375,9 +416,8 @@ Requirements:
                 .replace("%20", " ").strip()
             )
             clean_sources.append(filename)
-        best_doc = (clean_sources[0] if clean_sources else "support documentation")
         response_parts.append(
-            "Relevant documentation: "
+            "Relevant support references: "
             + ", ".join(clean_sources)
         )
         final_response = " ".join(

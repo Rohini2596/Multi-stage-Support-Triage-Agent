@@ -40,7 +40,7 @@ class ConfidenceCalibrator:
         )
 
         # VERY WEAK RETRIEVAL
-        if top_score < 10:
+        if top_score < 15:
 
             return RetrievalAssessment(
                 should_escalate=True,
@@ -50,7 +50,7 @@ class ConfidenceCalibrator:
             )
 
         # MODERATE RETRIEVAL
-        if top_score < 25:
+        if top_score < 35:
 
             return RetrievalAssessment(
                 should_escalate=(

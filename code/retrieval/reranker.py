@@ -15,7 +15,7 @@ class SimpleReranker:
         "devplatform": ["visa","claude","anthropic",],
     }
     ALIAS_MAP = {
-        "openai": "claude",
+        "hackerrank": "devplatform",
         "anthropic": "claude",
     }
     def rerank(self, query: str, results, company_hint=None, top_k: int = 5,):
@@ -79,6 +79,11 @@ class SimpleReranker:
                     for term in bad_terms
                 ):
                     path_boost -= 8
+                if (
+                    normalized_hint == "visa"
+                    and "claude" in path
+                ):
+                    path_boost -= 15
             final_score = (
                 r["score"]
                 + overlap
